@@ -1,12 +1,15 @@
 import pathlib
+import numpy as np
 from typing import List, Callable, Any, Optional, Union, Type, Sequence
-import traitlets
+
 import ipywidgets as widgets
+import traitlets
 
 from .canvases._abstract import AbstractAnnotationCanvas
-from .canvases.polygon import PolygonAnnotationCanvas
-from .canvases.point import PointAnnotationCanvas
 from .canvases.box import BoundingBoxAnnotationCanvas
+from .canvases.point import PointAnnotationCanvas
+from .canvases.polygon import PolygonAnnotationCanvas
+from .zoom_utils import ZoomController
 
 
 class Annotator(widgets.VBox):
@@ -35,21 +38,37 @@ class Annotator(widgets.VBox):
         canvas_size=(700, 500),
         options: Sequence[str] = (),
         data_postprocessor: Optional[Callable[[List[dict]], Any]] = None,
+        img_data: dict() = None,
+        mask_data: object = None,
+        exp_name : str = None,
+        well_name : str = None,
+        save_path : str = None,
+        field_id : int = 0,
+        chr_id : str = 'chr13',
         # **kwargs,
     ):
         """Create an annotation widget for images."""
         self.canvas = self.CanvasClass(canvas_size, classes=options)
+
         self.data_postprocessor = data_postprocessor
 
         # controls for the data entry:
         data_controls = []
         self.options = options
+        self.exp_name = exp_name
+        self.well_name = well_name
+        self.save_path = save_path
+        self.img_data = img_data
+        self.field_id = field_id
+        self.chr_id = chr_id
+        self.mask_data = mask_data
 
         self.class_selector = widgets.Dropdown(
             description="Class:",
             options=options,
             layout=widgets.Layout(flex="1 1 auto"),
         )
+        self.class_selector.layout.display = 'none'
         widgets.link((self, "options"), (self.class_selector, "options"))
         widgets.link(
             (self.class_selector, "value"), (self.canvas, "current_class")
@@ -166,14 +185,62 @@ class Annotator(widgets.VBox):
             },
         )
 
+	
+        #mask = self.mask_data[self.field_id]
+        #mask *=255
+        #mask = mask.astype(np.uint8)
+        #self.zoomed_canvas = ZoomController(mask, width=200, height=200)
+        chrs = ['chr13', 'chr18', 'chr21', 'chrY']
+        img = self.img_data[self.chr_id][self.field_id].copy()
+        img = img.astype(np.float32)
+        img_max = img.max() 
+
+        while img_max==0:
+            chr_id = chrs.index(self.chr_id)
+            if chr_id < 3:
+                self.chr_id = chrs[chr_id+1]
+            else:
+                self.chr_id = chrs[0]
+                if self.field_id < 120:
+                    self.field_id+=1
+                else:
+                    print("Last field, please restart with other well")
+                    return(-1)
+            img = self.img_data[self.chr_id][self.field_id].copy()
+            img = img.astype(np.float32)
+            img_max = img.max() 
+
+        img *= 255.0 / img_max
+        img = img.astype(np.uint8)
+        mask = self.mask_data[self.field_id].copy()
+        mask *=255
+        mask = mask.astype(np.uint8)
+        self.zoomed_canvas = ZoomController(mask, width=200, height=200)
+
+        widgets.link(
+            (self.zoomed_canvas, "zoom_scale"), (self.canvas, "zoom_scale")
+        )
+        widgets.link(
+            (self.zoomed_canvas.canvas, "x"), (self.canvas, "zoomed_image_x")
+        )
+        widgets.link(
+            (self.zoomed_canvas.canvas, "y"), (self.canvas, "zoomed_image_y")
+        )
+
         self.submit_callbacks: List[Callable[[Any], None]] = []
         self.undo_callbacks: List[Callable[[], None]] = []
         self.skip_callbacks: List[Callable[[], None]] = []
 
         super().__init__()
-        self.children = [self.canvas, self.all_controls]
+        self.children = [
+            self.all_controls,
+            widgets.HBox([self.canvas, self.zoomed_canvas]),
+        ]
 
-    def display(self, image: Union[widgets.Image, pathlib.Path]):
+        self.display(img, mask)
+
+
+    def display(self, image: Union[widgets.Image, pathlib.Path], mask: Union[widgets.Image, pathlib.Path]):
         """Clear the annotations and display an image
 
 
@@ -184,6 +251,7 @@ class Annotator(widgets.VBox):
         """
         self.canvas.clear()
         self.canvas.load_image(image)
+        self.zoomed_canvas.load_image(self.canvas.current_image, mask)
 
     def on_submit(self, callback: Callable[[Any], None]):
         """Register a callback to handle data when the user clicks "Submit".
@@ -213,7 +281,7 @@ class Annotator(widgets.VBox):
             Ignored argument. Supplied when invoked due to a button click.
         """
         for callback in self.submit_callbacks:
-            callback(self.data)
+            callback(self)
 
     def on_undo(self, callback: Callable[[], None]):
         """Register a callback to handle when the user clicks "Undo".
@@ -224,7 +292,7 @@ class Annotator(widgets.VBox):
 
         Parameters
         ----------
-        callback : Callable[[], None]
+        allback : Callable[[], None]
             A function to be called when users press "Undo". This should be
             a function that takes in no arguments; any return values are
             ignored.
@@ -270,15 +338,23 @@ class Annotator(widgets.VBox):
             Ignored argument. Supplied when invoked due to a button click.
         """
         for callback in self.skip_callbacks:
-            callback()
+            callback(self)
 
     @property
     def data(self):
         """The annotation data."""
         if self.data_postprocessor is not None:
-            return self.data_postprocessor(self.canvas.data)
+            return self.data_postprocessor(self)
         else:
             return self.canvas.data
+
+    def update_zoomed_image_crop(self, *change):
+        self.canvas.zoomed_image_x = int(
+            self.zoomed_canvas.x * self.canvas.zoomed_image.width
+        )
+        self.canvas.zoomed_image_y = int(
+            self.zoomed_canvas.y * self.canvas.zoomed_image.height
+        )
 
 
 class PolygonAnnotator(Annotator):
