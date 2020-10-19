@@ -134,6 +134,7 @@ class Annotator(widgets.VBox):
                     (self.submit_button,),
                     layout={"justify_content": "flex-end"},
                 ),
+                widgets.HTML("<h3>" + self.exp_name + "  " + self.well_name + "</h3><h4>" + str(self.field_id) + "</h4>"),
             ),
             layout={"flex": "1 1 auto", "max_width": "600px"},
         )
@@ -185,35 +186,34 @@ class Annotator(widgets.VBox):
             },
         )
 
-	
-        #mask = self.mask_data[self.field_id]
-        #mask *=255
-        #mask = mask.astype(np.uint8)
-        #self.zoomed_canvas = ZoomController(mask, width=200, height=200)
         chrs = ['chr13', 'chr18', 'chr21', 'chrY']
         img = self.img_data[self.chr_id][self.field_id].copy()
         img = img.astype(np.float32)
-        img_max = img.max() 
+        img_max = img.max()
 
-        while img_max==0:
+        while img_max == 0:
             chr_id = chrs.index(self.chr_id)
             if chr_id < 3:
-                self.chr_id = chrs[chr_id+1]
+                self.chr_id = chrs[chr_id + 1]
             else:
                 self.chr_id = chrs[0]
                 if self.field_id < 120:
-                    self.field_id+=1
+                    self.field_id += 1
                 else:
                     print("Last field, please restart with other well")
                     return(-1)
             img = self.img_data[self.chr_id][self.field_id].copy()
             img = img.astype(np.float32)
-            img_max = img.max() 
+            img_max = img.max()
 
+        subtitle = widgets.HTML("<h4>" + self.exp_name + "  " + self.well_name + " field " + str(self.field_id+1) + "</h4>")
+        dcontrols = list(self.data_controls.children)
+        dcontrols[-1] = subtitle
+        self.data_controls.children = tuple(dcontrols)
         img *= 255.0 / img_max
         img = img.astype(np.uint8)
         mask = self.mask_data[self.field_id].copy()
-        mask *=255
+        mask *= 55
         mask = mask.astype(np.uint8)
         self.zoomed_canvas = ZoomController(mask, width=200, height=200)
 
@@ -238,7 +238,6 @@ class Annotator(widgets.VBox):
         ]
 
         self.display(img, mask)
-
 
     def display(self, image: Union[widgets.Image, pathlib.Path], mask: Union[widgets.Image, pathlib.Path]):
         """Clear the annotations and display an image
