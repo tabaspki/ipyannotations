@@ -206,7 +206,7 @@ class Annotator(widgets.VBox):
             img = img.astype(np.float32)
             img_max = img.max()
 
-        subtitle = widgets.HTML("<h4>" + self.exp_name + "  " + self.well_name + " field " + str(self.field_id+1) + "</h4>")
+        subtitle = widgets.HTML("<h4>" + self.exp_name + "  " + self.well_name + " field " + str(self.field_id+1) + " " + self.chr_id  + "</h4>")
         dcontrols = list(self.data_controls.children)
         dcontrols[-1] = subtitle
         self.data_controls.children = tuple(dcontrols)

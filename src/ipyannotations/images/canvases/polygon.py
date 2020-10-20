@@ -107,7 +107,7 @@ class PolygonAnnotationCanvas(AbstractAnnotationCanvas):
         polygon.points = list(
             starmap(self.map_image_coords_to_canvas, polygon.points)
         )
-        color = self.colormap.get(polygon.label, "#000000")
+        color = self.colormap.get(polygon.label, "#FF0000")
         canvas = self[1]
         rgb = hex_to_rgb(color)
         xs, ys = polygon.xy_lists
